@@ -1,6 +1,8 @@
+using FileUploaderPartB.Worker.Shared;
+
 namespace FileUploaderPartB.Worker.Interfaces;
 
 public interface IKafkaConsumerService
 {
-    IAsyncEnumerable<string> ConsumeAsync(CancellationToken cancellationToken);
+    IAsyncEnumerable<Result<string>> ConsumeAsync(CancellationToken cancellationToken);
 }
