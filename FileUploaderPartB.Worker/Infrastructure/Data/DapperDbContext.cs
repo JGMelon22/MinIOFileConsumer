@@ -11,7 +11,7 @@ public class DapperDbContext
     public DapperDbContext(IConfiguration configuration)
     {
         _configuration = configuration;
-        _connectionString = configuration.GetConnectionString("Default")!;
+        _connectionString = _configuration.GetConnectionString("Default")!;
     }
 
     public IDbConnection CreateConnection()
