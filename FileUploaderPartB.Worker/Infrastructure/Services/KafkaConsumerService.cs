@@ -36,8 +36,15 @@ public class KafkaConsumerService : IKafkaConsumerService
 
             try
             {
-                var consumeResult = _consumer.Consume(cancellationToken);
-                result = Result<string>.Success(consumeResult.Message.Value);
+                var consumeResult = _consumer.Consume(TimeSpan.FromSeconds(15));
+                if (consumeResult == null || consumeResult.Message?.Value == null)
+                {
+                    result = Result<string>.Failure("No message received or null value.");
+                }
+                else
+                {
+                    result = Result<string>.Success(consumeResult.Message.Value);
+                }
             }
             catch (ConsumeException ex)
             {

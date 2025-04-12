@@ -21,60 +21,69 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (Result<string> message in _kafkaService.ConsumeAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
-            _logger.LogInformation("Received message: {Message}", message);
+            _logger.LogInformation("Worker iteration started at {Time}", DateTimeOffset.Now);
 
-            using var scope = _serviceProvider.CreateScope();
-
-            IS3Service s3Service = scope.ServiceProvider.GetRequiredService<IS3Service>();
-            IFileRepository repository = scope.ServiceProvider.GetRequiredService<IFileRepository>();
-            ICsvValidatorService csvValidatorService = scope.ServiceProvider.GetRequiredService<ICsvValidatorService>();
-
-            bool isPending = await repository.IsPendingAsync(message.Data!);
-
-            if (isPending)
+            await foreach (Result<string> message in _kafkaService.ConsumeAsync(stoppingToken))
             {
-                _logger.LogInformation("File {File} already processed.", message);
-                continue;
-            }
+                _logger.LogInformation("Received message: {Message}", message);
 
-            await repository.MarkAsProcessingAsync(message.Data!);
-
-
-            var downloadResult = await s3Service.DownloadFileAsync(message.Data!);
-
-            if (!downloadResult.IsSuccess)
-            {
-                await repository.MarkAsFailedAsync(message.Data!);
-
-                _logger.LogError("Failed to download file from S3: {Message}", downloadResult.Message);
-                continue;
-            }
-
-            try
-            {
-                using (var stream = downloadResult.Data!)
+                if (!message.IsSuccess || string.IsNullOrWhiteSpace(message.Data))
                 {
-                    var validationResult = csvValidatorService.ValidateCsv(stream);
-                    if (!validationResult.IsSuccess)
-                    {
-                        // If validation fails, mark the file as failed and log the error
-                        await repository.MarkAsFailedAsync(message.Data!);
-                        _logger.LogError("CSV validation failed for file {File}: {Errors}", message, validationResult.Message);
-                        continue;
-                    }
+                    _logger.LogWarning("Skipping invalid message.");
+                    continue;
                 }
 
-                await repository.MarkAsProcessedAsync(message.Data!);
-                _logger.LogInformation("File {File} processed successfully.", message);
+                using var scope = _serviceProvider.CreateScope();
+
+                var s3Service = scope.ServiceProvider.GetRequiredService<IS3Service>();
+                var repository = scope.ServiceProvider.GetRequiredService<IFileRepository>();
+                var csvValidatorService = scope.ServiceProvider.GetRequiredService<ICsvValidatorService>();
+
+                bool isPending = await repository.IsPendingAsync(message.Data);
+
+                if (isPending)
+                {
+                    _logger.LogInformation("File {File} already processed.", message.Data);
+                    continue;
+                }
+
+                await repository.MarkAsProcessingAsync(message.Data);
+
+                var downloadResult = await s3Service.DownloadFileAsync(message.Data);
+
+                if (!downloadResult.IsSuccess)
+                {
+                    await repository.MarkAsFailedAsync(message.Data);
+                    _logger.LogError("Failed to download file from S3: {Message}", downloadResult.Message);
+                    continue;
+                }
+
+                try
+                {
+                    using var stream = downloadResult.Data!;
+                    var validationResult = csvValidatorService.ValidateCsv(stream);
+
+                    if (!validationResult.IsSuccess)
+                    {
+                        await repository.MarkAsFailedAsync(message.Data);
+                        _logger.LogError("CSV validation failed for file {File}: {Errors}", message.Data, validationResult.Message);
+                        continue;
+                    }
+
+                    await repository.MarkAsProcessedAsync(message.Data);
+                    _logger.LogInformation("File {File} processed successfully.", message.Data);
+                }
+                catch (Exception ex)
+                {
+                    await repository.MarkAsFailedAsync(message.Data);
+                    _logger.LogError(ex, "Error processing message {Message}", message.Data);
+                }
             }
 
-            catch (Exception ex)
-            {
-                await repository.MarkAsFailedAsync(message.Data!);
-                _logger.LogError(ex, "Error processing message {Message}", message);
-            }
+            _logger.LogInformation("Worker iteration finished. Waiting 15 minutes...");
+            await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
         }
     }
 }
