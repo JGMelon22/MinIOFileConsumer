@@ -4,5 +4,5 @@ namespace FileUploaderPartB.Worker.Interfaces;
 
 public interface ICsvValidatorService
 {
-    public Result<List<string>> ValidateCsv(string filePath);
+    public Result<List<string>> ValidateCsv(Stream stream);
 }

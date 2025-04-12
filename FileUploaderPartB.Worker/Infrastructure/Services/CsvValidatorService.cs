@@ -17,19 +17,13 @@ public class CsvValidatorService : ICsvValidatorService
         _logger = logger;
     }
 
-    public Result<List<string>> ValidateCsv(string filePath)
+    public Result<List<string>> ValidateCsv(Stream stream)
     {
         List<string> errors = [];
 
-        if (!File.Exists(filePath))
-        {
-            _logger.LogWarning("File not found: {FilePath}", filePath);
-            return Result<List<string>>.Failure("Arquivo não encontrado.");
-        }
-
         try
         {
-            using StreamReader streamReader = new(filePath, Encoding.UTF8);
+            using StreamReader streamReader = new(stream, Encoding.UTF8);
             CsvConfiguration csvConfig = new(CultureInfo.InvariantCulture)
             {
                 Delimiter = ";",
@@ -71,7 +65,7 @@ public class CsvValidatorService : ICsvValidatorService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred during CSV validation for file: {FilePath}", filePath);
+            _logger.LogError(ex, "Error occurred during CSV validation for file: {FilePath}", stream);
             return Result<List<string>>.Failure($"Erro durante a validação: {ex.Message}");
         }
     }
@@ -143,7 +137,9 @@ public class CsvValidatorService : ICsvValidatorService
 
     private static List<string> ValidateGender(Gender? gender)
     {
-        return gender is Gender.Feminino or Gender.Masculino ? [] : ["Gênero deve ser 'FEMININO' ou 'MASCULINO'."];
+        return gender is Gender.Feminino or Gender.Masculino
+            ? new List<string>()
+            : new List<string> { "Gênero deve ser 'FEMININO' ou 'MASCULINO'." };
     }
 
     private static List<string> ValidateBirthday(DateTime? birthday)
