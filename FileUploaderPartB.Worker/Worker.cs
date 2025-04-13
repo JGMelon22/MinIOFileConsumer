@@ -1,4 +1,5 @@
 using FileUploaderPartB.Worker.Interfaces;
+using FileUploaderPartB.Worker.Models;
 using FileUploaderPartB.Worker.Shared;
 
 namespace FileUploaderPartB.Worker;
@@ -25,37 +26,42 @@ public class Worker : BackgroundService
         {
             _logger.LogInformation("Worker iteration started at {Time}", DateTimeOffset.Now);
 
-            await foreach (Result<string> message in _kafkaService.ConsumeAsync(stoppingToken))
+            await foreach (Result<FileMessage> message in _kafkaService.ConsumeAsync(stoppingToken))
             {
                 _logger.LogInformation("Received message: {Message}", message);
 
-                if (!message.IsSuccess || string.IsNullOrWhiteSpace(message.Data))
+                if (!message.IsSuccess || message.Data == null)
                 {
                     _logger.LogWarning("Skipping invalid message.");
                     continue;
                 }
 
-                using var scope = _serviceProvider.CreateScope();
+                var fileMessage = message.Data;
 
-                var s3Service = scope.ServiceProvider.GetRequiredService<IS3Service>();
-                var repository = scope.ServiceProvider.GetRequiredService<IFileRepository>();
-                var csvValidatorService = scope.ServiceProvider.GetRequiredService<ICsvValidatorService>();
+                _logger.LogInformation("Processing message with ID: {Id}, S3Path: {S3Path}, Status: {Status}",
+                 fileMessage.Id, fileMessage.S3Path, fileMessage.Status);
 
-                bool isPending = await repository.IsPendingAsync(message.Data);
+                using IServiceScope scope = _serviceProvider.CreateScope();
 
-                if (isPending)
+                IS3Service s3Service = scope.ServiceProvider.GetRequiredService<IS3Service>();
+                IFileRepository repository = scope.ServiceProvider.GetRequiredService<IFileRepository>();
+                ICsvValidatorService csvValidatorService = scope.ServiceProvider.GetRequiredService<ICsvValidatorService>();
+
+                bool isPending = await repository.IsPendingAsync(fileMessage.S3Path);
+
+                if (!isPending)
                 {
-                    _logger.LogInformation("File {File} already processed.", message.Data);
+                    _logger.LogInformation("File {File} already processed.", fileMessage.Id);
                     continue;
                 }
 
-                await repository.MarkAsProcessingAsync(message.Data);
+                await repository.MarkAsProcessingAsync(fileMessage.S3Path);
 
-                var downloadResult = await s3Service.DownloadFileAsync(message.Data);
+                var downloadResult = await s3Service.DownloadFileAsync(fileMessage.S3Path);
 
                 if (!downloadResult.IsSuccess)
                 {
-                    await repository.MarkAsFailedAsync(message.Data);
+                    await repository.MarkAsFailedAsync(fileMessage.S3Path);
                     _logger.LogError("Failed to download file from S3: {Message}", downloadResult.Message);
                     continue;
                 }
@@ -63,22 +69,22 @@ public class Worker : BackgroundService
                 try
                 {
                     using var stream = downloadResult.Data!;
-                    var validationResult = csvValidatorService.ValidateCsv(stream);
+                    var validationResult = await csvValidatorService.ValidateCsvAsync(stream);
 
                     if (!validationResult.IsSuccess)
                     {
-                        await repository.MarkAsFailedAsync(message.Data);
-                        _logger.LogError("CSV validation failed for file {File}: {Errors}", message.Data, validationResult.Message);
+                        await repository.MarkAsFailedAsync(fileMessage.S3Path);
+                        _logger.LogError("CSV validation failed for file {File}: {Errors}", fileMessage.Id, validationResult.Message);
                         continue;
                     }
 
-                    await repository.MarkAsProcessedAsync(message.Data);
-                    _logger.LogInformation("File {File} processed successfully.", message.Data);
+                    await repository.MarkAsProcessedAsync(fileMessage.S3Path);
+                    _logger.LogInformation("File {File} processed successfully.", fileMessage.Id);
                 }
                 catch (Exception ex)
                 {
-                    await repository.MarkAsFailedAsync(message.Data);
-                    _logger.LogError(ex, "Error processing message {Message}", message.Data);
+                    await repository.MarkAsFailedAsync(fileMessage.S3Path);
+                    _logger.LogError(ex, "Error processing message {Message}", fileMessage.Id);
                 }
             }
 

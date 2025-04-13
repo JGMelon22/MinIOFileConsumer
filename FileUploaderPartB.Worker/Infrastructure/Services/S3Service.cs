@@ -31,10 +31,12 @@ public class S3Service : IS3Service
         _logger = logger;
     }
 
-    public async Task<Result<Stream>> DownloadFileAsync(string key)
+    public async Task<Result<MemoryStream>> DownloadFileAsync(string s3Path)
     {
         try
         {
+            string key = ExtractFileKey(s3Path);
+
             _logger.LogInformation("Attempting to download file from S3: {Key}", key);
 
             GetObjectRequest request = new()
@@ -43,22 +45,43 @@ public class S3Service : IS3Service
                 Key = key
             };
 
-            GetObjectResponse response = await _s3Client.GetObjectAsync(request);
+            using GetObjectResponse response = await _s3Client.GetObjectAsync(request);
+
+            // Copiar o conteúdo do ResponseStream para um MemoryStream
+            MemoryStream memoryStream = new();
+            await response.ResponseStream.CopyToAsync(memoryStream);
+            memoryStream.Position = 0; // Reposicionar para o início
 
             _logger.LogInformation("Successfully downloaded file: {Key}", key);
 
-            return Result<Stream>.Success(response.ResponseStream);
+            return Result<MemoryStream>.Success(memoryStream);
         }
-
         catch (AmazonS3Exception s3Ex)
         {
-            _logger.LogError(s3Ex, "AmazonS3Exception occurred while downloading file: {Key}", key);
-            return Result<Stream>.Failure($"S3 error: {s3Ex.Message}");
+            _logger.LogError(s3Ex, "AmazonS3Exception occurred while downloading file: {Key}", s3Path);
+            return Result<MemoryStream>.Failure($"S3 error: {s3Ex.Message}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error occurred while downloading file: {Key}", key);
-            return Result<Stream>.Failure($"Unexpected error: {ex.Message}");
+            _logger.LogError(ex, "Unexpected error occurred while downloading file: {Key}", s3Path);
+            return Result<MemoryStream>.Failure($"Unexpected error: {ex.Message}");
         }
+    }
+
+
+    private string ExtractFileKey(string s3Path)
+    {
+        // Extraia apenas o caminho relativo
+        if (Uri.TryCreate(s3Path, UriKind.Absolute, out Uri? uri))
+        {
+            // Remove o nome do bucket do caminho, se estiver presente
+            string relativePath = uri.AbsolutePath.TrimStart('/');
+            if (relativePath.StartsWith(_bucketName + "/"))
+            {
+                return relativePath.Substring(_bucketName.Length + 1);
+            }
+            return relativePath;
+        }
+        return s3Path;
     }
 }

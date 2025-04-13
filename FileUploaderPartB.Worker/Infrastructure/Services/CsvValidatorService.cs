@@ -17,12 +17,15 @@ public class CsvValidatorService : ICsvValidatorService
         _logger = logger;
     }
 
-    public Result<List<string>> ValidateCsv(Stream stream)
+    public async Task<Result<List<string>>> ValidateCsvAsync(MemoryStream stream)
     {
-        List<string> errors = [];
+        List<string> errors = new();
 
         try
         {
+            // Garantir que a posição do MemoryStream está no início
+            stream.Position = 0;
+
             using StreamReader streamReader = new(stream, Encoding.UTF8);
             CsvConfiguration csvConfig = new(CultureInfo.InvariantCulture)
             {
@@ -32,12 +35,15 @@ public class CsvValidatorService : ICsvValidatorService
             };
 
             using CsvReader csvReader = new(streamReader, csvConfig);
-            csvReader.Read();
-            csvReader.ReadHeader();
-
-            while (csvReader.Read())
+            if (!await csvReader.ReadAsync() || !csvReader.ReadHeader())
             {
-                List<string> rowErrors = [];
+                _logger.LogError("CSV file is empty or missing headers.");
+                return Result<List<string>>.Failure("CSV file is empty or missing headers.");
+            }
+
+            while (await csvReader.ReadAsync())
+            {
+                List<string> rowErrors = new();
                 ContactImport contact = MapContact(csvReader);
 
                 rowErrors.AddRange(ValidateName(contact.FirstName, "Firstname"));
@@ -61,14 +67,15 @@ public class CsvValidatorService : ICsvValidatorService
                 return Result<List<string>>.Failure(string.Join(" | ", errors));
             }
 
-            return Result<List<string>>.Success([]);
+            return Result<List<string>>.Success(new List<string>());
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred during CSV validation for file: {FilePath}", stream);
+            _logger.LogError(ex, "Error occurred during CSV validation.");
             return Result<List<string>>.Failure($"Erro durante a validação: {ex.Message}");
         }
     }
+
 
     private ContactImport MapContact(CsvReader csv)
     {
