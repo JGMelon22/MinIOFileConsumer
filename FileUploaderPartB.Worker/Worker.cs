@@ -36,7 +36,7 @@ public class Worker : BackgroundService
                     continue;
                 }
 
-                var fileMessage = message.Data;
+                FileMessage fileMessage = message.Data;
 
                 _logger.LogInformation("Processing message with ID: {Id}, S3Path: {S3Path}, Status: {Status}",
                  fileMessage.Id, fileMessage.S3Path, fileMessage.Status);
@@ -57,7 +57,7 @@ public class Worker : BackgroundService
 
                 await repository.MarkAsProcessingAsync(fileMessage.S3Path);
 
-                var downloadResult = await s3Service.DownloadFileAsync(fileMessage.S3Path);
+                Result<MemoryStream> downloadResult = await s3Service.DownloadFileAsync(fileMessage.S3Path);
 
                 if (!downloadResult.IsSuccess)
                 {
@@ -68,8 +68,8 @@ public class Worker : BackgroundService
 
                 try
                 {
-                    using var stream = downloadResult.Data!;
-                    var validationResult = await csvValidatorService.ValidateCsvAsync(stream);
+                    using MemoryStream stream = downloadResult.Data!;
+                    Result<List<string>> validationResult = await csvValidatorService.ValidateCsvAsync(stream);
 
                     if (!validationResult.IsSuccess)
                     {
@@ -88,8 +88,8 @@ public class Worker : BackgroundService
                 }
             }
 
-            _logger.LogInformation("Worker iteration finished. Waiting 15 minutes...");
-            await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
+            _logger.LogInformation("Worker iteration finished. Waiting 15 seconds...");
+            await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
         }
     }
 }

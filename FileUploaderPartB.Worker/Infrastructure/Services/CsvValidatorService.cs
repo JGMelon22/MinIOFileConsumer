@@ -23,9 +23,6 @@ public class CsvValidatorService : ICsvValidatorService
 
         try
         {
-            // Garantir que a posição do MemoryStream está no início
-            stream.Position = 0;
-
             using StreamReader streamReader = new(stream, Encoding.UTF8);
             CsvConfiguration csvConfig = new(CultureInfo.InvariantCulture)
             {
@@ -76,24 +73,23 @@ public class CsvValidatorService : ICsvValidatorService
         }
     }
 
-
     private ContactImport MapContact(CsvReader csv)
     {
         return new ContactImport
         {
-            FirstName = csv.GetField<string>("firstname")!,
-            LastName = csv.GetField<string>("lastname")!,
-            Email = csv.GetField<string>("email")!,
-            Cpf = csv.GetField<string>("cpf")!,
-            Phone = AdjustPhone(csv.GetField<string>("phone")!),
-            Gender = MapGender(csv.GetField<string>("gender")!),
-            Birthday = ParseDate(csv.GetField<string>("birthDay")!)
+            FirstName = csv.GetField<string>("FirstName")!,
+            LastName = csv.GetField<string>("LastName")!,
+            Email = csv.GetField<string>("Email")!,
+            Cpf = csv.GetField<string>("Cpf")!,
+            Phone = AdjustPhone(csv.GetField<string>("Phone")!),
+            Gender = MapGender(csv.GetField<string>("Gender")!),
+            Birthday = ParseDate(csv.GetField<string>("Birthday")!)
         };
     }
 
     private static string AdjustPhone(string phone)
     {
-        var digitsOnly = new string(phone.Where(char.IsDigit).ToArray());
+        string digitsOnly = new string(phone.Where(char.IsDigit).ToArray());
         return digitsOnly.StartsWith("55") ? digitsOnly : "55" + digitsOnly;
     }
 

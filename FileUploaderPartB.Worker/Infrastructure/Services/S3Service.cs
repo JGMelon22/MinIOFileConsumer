@@ -47,10 +47,10 @@ public class S3Service : IS3Service
 
             using GetObjectResponse response = await _s3Client.GetObjectAsync(request);
 
-            // Copiar o conteúdo do ResponseStream para um MemoryStream
+            // Copiar o conteudo do ResponseStream para um MemoryStream
             MemoryStream memoryStream = new();
             await response.ResponseStream.CopyToAsync(memoryStream);
-            memoryStream.Position = 0; // Reposicionar para o início
+            memoryStream.Position = 0; // Reposicionar para o inicio
 
             _logger.LogInformation("Successfully downloaded file: {Key}", key);
 
@@ -67,8 +67,7 @@ public class S3Service : IS3Service
             return Result<MemoryStream>.Failure($"Unexpected error: {ex.Message}");
         }
     }
-
-
+    
     private string ExtractFileKey(string s3Path)
     {
         // Extraia apenas o caminho relativo

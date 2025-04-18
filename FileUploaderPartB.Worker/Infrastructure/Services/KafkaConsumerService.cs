@@ -48,7 +48,7 @@ public class KafkaConsumerService : IKafkaConsumerService
                     try
                     {
                         FileMessage? fileMessage = JsonSerializer.Deserialize<FileMessage>(consumeResult.Message.Value,
-                            new JsonSerializerOptions
+                        new JsonSerializerOptions
                         {
                             PropertyNameCaseInsensitive = true
                         });
