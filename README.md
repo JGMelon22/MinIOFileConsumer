@@ -18,6 +18,7 @@ This service worker allows efficient background processing of large CSV files (u
 ---
 
 ## 🗺️ Project Structure
+![diagram(1)](https://github.com/user-attachments/assets/abce5c00-4ebd-4609-9c83-398292ccb762)
 
 ---
 
