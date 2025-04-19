@@ -17,9 +17,9 @@ public class CsvValidatorService : ICsvValidatorService
         _logger = logger;
     }
 
-    public Result<List<string>> ValidateCsv(Stream stream)
+    public async Task<Result<List<string>>> ValidateCsvAsync(MemoryStream stream)
     {
-        List<string> errors = [];
+        List<string> errors = new();
 
         try
         {
@@ -32,12 +32,15 @@ public class CsvValidatorService : ICsvValidatorService
             };
 
             using CsvReader csvReader = new(streamReader, csvConfig);
-            csvReader.Read();
-            csvReader.ReadHeader();
-
-            while (csvReader.Read())
+            if (!await csvReader.ReadAsync() || !csvReader.ReadHeader())
             {
-                List<string> rowErrors = [];
+                _logger.LogError("CSV file is empty or missing headers.");
+                return Result<List<string>>.Failure("CSV file is empty or missing headers.");
+            }
+
+            while (await csvReader.ReadAsync())
+            {
+                List<string> rowErrors = new();
                 ContactImport contact = MapContact(csvReader);
 
                 rowErrors.AddRange(ValidateName(contact.FirstName, "Firstname"));
@@ -61,11 +64,11 @@ public class CsvValidatorService : ICsvValidatorService
                 return Result<List<string>>.Failure(string.Join(" | ", errors));
             }
 
-            return Result<List<string>>.Success([]);
+            return Result<List<string>>.Success(new List<string>());
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred during CSV validation for file: {FilePath}", stream);
+            _logger.LogError(ex, "Error occurred during CSV validation.");
             return Result<List<string>>.Failure($"Erro durante a validação: {ex.Message}");
         }
     }
@@ -74,19 +77,19 @@ public class CsvValidatorService : ICsvValidatorService
     {
         return new ContactImport
         {
-            FirstName = csv.GetField<string>("firstname")!,
-            LastName = csv.GetField<string>("lastname")!,
-            Email = csv.GetField<string>("email")!,
-            Cpf = csv.GetField<string>("cpf")!,
-            Phone = AdjustPhone(csv.GetField<string>("phone")!),
-            Gender = MapGender(csv.GetField<string>("gender")!),
-            Birthday = ParseDate(csv.GetField<string>("birthDay")!)
+            FirstName = csv.GetField<string>("FirstName")!,
+            LastName = csv.GetField<string>("LastName")!,
+            Email = csv.GetField<string>("Email")!,
+            Cpf = csv.GetField<string>("Cpf")!,
+            Phone = AdjustPhone(csv.GetField<string>("Phone")!),
+            Gender = MapGender(csv.GetField<string>("Gender")!),
+            Birthday = ParseDate(csv.GetField<string>("Birthday")!)
         };
     }
 
     private static string AdjustPhone(string phone)
     {
-        var digitsOnly = new string(phone.Where(char.IsDigit).ToArray());
+        string digitsOnly = new string(phone.Where(char.IsDigit).ToArray());
         return digitsOnly.StartsWith("55") ? digitsOnly : "55" + digitsOnly;
     }
 

@@ -4,5 +4,5 @@ namespace FileUploaderPartB.Worker.Interfaces;
 
 public interface IS3Service
 {
-    Task<Result<Stream>> DownloadFileAsync(string key);
+    Task<Result<MemoryStream>> DownloadFileAsync(string s3Path);
 }

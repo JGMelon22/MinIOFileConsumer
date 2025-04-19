@@ -1,7 +1,9 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Confluent.Kafka;
 using FileUploaderPartB.Worker.Infrastructure.Configurations;
 using FileUploaderPartB.Worker.Interfaces;
+using FileUploaderPartB.Worker.Models;
 using FileUploaderPartB.Worker.Shared;
 using Microsoft.Extensions.Options;
 
@@ -28,28 +30,49 @@ public class KafkaConsumerService : IKafkaConsumerService
         _logger = logger;
     }
 
-    public async IAsyncEnumerable<Result<string>> ConsumeAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    public async IAsyncEnumerable<Result<FileMessage>> ConsumeAsync([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            Result<string> result;
+            Result<FileMessage> result;
 
             try
             {
-                var consumeResult = _consumer.Consume(TimeSpan.FromSeconds(15));
+                ConsumeResult<Ignore, string> consumeResult = _consumer.Consume(cancellationToken);
                 if (consumeResult == null || consumeResult.Message?.Value == null)
                 {
-                    result = Result<string>.Failure("No message received or null value.");
+                    result = Result<FileMessage>.Failure("No message received or null value.");
                 }
                 else
                 {
-                    result = Result<string>.Success(consumeResult.Message.Value);
+                    try
+                    {
+                        FileMessage? fileMessage = JsonSerializer.Deserialize<FileMessage>(consumeResult.Message.Value,
+                        new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+
+                        if (fileMessage == null)
+                        {
+                            result = Result<FileMessage>.Failure("Deserialization resulted in a null object.");
+                        }
+                        else
+                        {
+                            result = Result<FileMessage>.Success(fileMessage);
+                        }
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogError(ex, "JSON deserialization error for message: {Message}", consumeResult.Message.Value);
+                        result = Result<FileMessage>.Failure($"JSON deserialization error: {ex.Message}");
+                    }
                 }
             }
             catch (ConsumeException ex)
             {
                 _logger.LogError(ex, "Kafka consume error occurred while consuming from topic: {Topic}", _options.Topic);
-                result = Result<string>.Failure($"Kafka consume error: {ex.Message}");
+                result = Result<FileMessage>.Failure($"Kafka consume error: {ex.Message}");
             }
             catch (OperationCanceledException)
             {
@@ -59,7 +82,7 @@ public class KafkaConsumerService : IKafkaConsumerService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error occurred while consuming from topic: {Topic}", _options.Topic);
-                result = Result<string>.Failure($"Unexpected error: {ex.Message}");
+                result = Result<FileMessage>.Failure($"Unexpected error: {ex.Message}");
             }
 
             yield return result;

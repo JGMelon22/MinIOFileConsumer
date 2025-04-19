@@ -57,8 +57,8 @@ public class FileRepository : IFileRepository
             const string sql = @"
                                 UPDATE imports 
                                 SET status = @Status,
-                                ProcessedAt = UTC_TIMESTAMP()
-                                WHERE s3_path = @FilePath";
+                                created_at = UTC_TIMESTAMP()
+                                WHERE s3_path = @S3Path";
 
             using (IDbConnection connection = _dbContext.CreateConnection())
             {
@@ -84,8 +84,8 @@ public class FileRepository : IFileRepository
             const string sql = @"
                                 UPDATE imports 
                                 SET status = @Status,
-                                ProcessedAt = UTC_TIMESTAMP()
-                                WHERE s3_path = @FilePath";
+                                created_at = UTC_TIMESTAMP()
+                                WHERE s3_path = @S3Path";
 
             using (IDbConnection connection = _dbContext.CreateConnection())
             {
@@ -111,8 +111,8 @@ public class FileRepository : IFileRepository
             const string sql = @"
                                 UPDATE imports 
                                 SET status = @Status,
-                                ProcessedAt = UTC_TIMESTAMP()
-                                WHERE s3_path = @FilePath";
+                                created_at = UTC_TIMESTAMP()
+                                WHERE s3_path = @S3Path";
 
             using (IDbConnection connection = _dbContext.CreateConnection())
             {
